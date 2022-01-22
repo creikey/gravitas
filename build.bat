@@ -1,2 +1,0 @@
-cd src
-make PLATFORM=PLATFORM_WEB -B -j6
