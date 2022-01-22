@@ -24,46 +24,83 @@
 **********************************************************************************************/
 
 #include "raylib.h"
+#include "raymath.h"
 #include "screens.h"
+
+const float player_radius = 18.0;
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
 //----------------------------------------------------------------------------------
-static int framesCounter = 0;
+// static int framesCounter = 0;
 static int finishScreen = 0;
+static Vector2 position = { .x = 200, .y = 300 };
+static Vector2 velocity = { 0 };
 
+static Rectangle obstacle = {
+    .x = 400,
+    .y = 400,
+    .width = 100,
+    .height = 200,
+};
 //----------------------------------------------------------------------------------
 // Gameplay Screen Functions Definition
 //----------------------------------------------------------------------------------
 
+
+float clamp(float value, float min, float max) {
+    if(value < min) {
+        return min;
+    }
+    if(value > max) {
+        return max;
+    }
+    return value;
+}
+
+// Project a onto b
+Vector2 Vector2Project(Vector2 a, Vector2 b) {
+    return Vector2Scale(Vector2Normalize(b), Vector2DotProduct(a, b)/Vector2Length(b));
+}
+
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
-    // TODO: Initialize GAMEPLAY screen variables here!
-    framesCounter = 0;
-    finishScreen = 0;
+
 }
 
 // Gameplay Screen Update logic
 void UpdateGameplayScreen(void)
 {
-    // TODO: Update GAMEPLAY screen variables here!
+    float delta = GetFrameTime();
+    Vector2 movement = {
+        .x = (float)IsKeyDown(KEY_D) - (float)IsKeyDown(KEY_A),
+        .y = (float)IsKeyDown(KEY_S) - (float)IsKeyDown(KEY_W),
+    };
 
-    // Press enter or tap to change to ENDING screen
-    if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
-    {
-        finishScreen = 1;
-        PlaySound(fxCoin);
+    movement = Vector2Normalize(movement);
+
+    velocity = Vector2Lerp(velocity, Vector2Scale(movement, 400.0), delta*9.0);
+    position = Vector2Add(position, Vector2Scale(velocity, delta));
+
+    Vector2 normal = {0};
+    Vector2 obstacleCenter = {.x = obstacle.x + obstacle.width/2.0, .y = obstacle.y + obstacle.height/2.0};
+    Vector2 fromObstacleCenter = Vector2Subtract(position, obstacleCenter);
+    fromObstacleCenter.x = clamp(fromObstacleCenter.x, -obstacle.width/2.0, obstacle.width/2.0);
+    fromObstacleCenter.y = clamp(fromObstacleCenter.y, -obstacle.height/2.0, obstacle.height/2.0);
+    Vector2 closestPointOnObstacle = Vector2Add(fromObstacleCenter, obstacleCenter);
+    if(Vector2Distance(closestPointOnObstacle, position) < player_radius) {
+        normal = Vector2Normalize(Vector2Subtract(position, closestPointOnObstacle));
+        position = Vector2Add(closestPointOnObstacle, Vector2Scale(normal, player_radius));
     }
 }
 
 // Gameplay Screen Draw logic
 void DrawGameplayScreen(void)
 {
-    // TODO: Draw GAMEPLAY screen here!
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), PURPLE);
-    DrawTextEx(font, "GAMEPLAY SCREEN", (Vector2){ 20, 10 }, font.baseSize*3, 4, MAROON);
-    DrawText("PRESS ENTER or TAP to JUMP to ENDING SCREEN", 130, 220, 20, MAROON);
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
+    DrawCircleV(position, player_radius, PINK);
+    DrawRectanglePro(obstacle, (Vector2){0}, 0.0, GRAY);
 }
 
 // Gameplay Screen Unload logic

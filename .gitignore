@@ -1,3 +1,10 @@
+# exported game
+src/*.data
+src/*.html
+src/*.js
+src/*.wasm
+
+
 # Prerequisites
 *.d
 
