@@ -36,6 +36,8 @@ const float player_radius = 18.0;
 static int finishScreen = 0;
 static Vector2 position = { .x = 200, .y = 300 };
 static Vector2 velocity = { 0 };
+static Vector2 fireExtinguisherPosition = { 100, 100 };
+static Texture fireExtinguisher;
 
 static Rectangle obstacle = {
     .x = 400,
@@ -66,7 +68,7 @@ Vector2 Vector2Project(Vector2 a, Vector2 b) {
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
-
+    fireExtinguisher = LoadTexture("resources/Fire Extinguisher.png");
 }
 
 // Gameplay Screen Update logic
@@ -101,6 +103,7 @@ void DrawGameplayScreen(void)
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
     DrawCircleV(position, player_radius, PINK);
     DrawRectanglePro(obstacle, (Vector2){0}, 0.0, GRAY);
+    DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0, 0.35, WHITE);
 }
 
 // Gameplay Screen Unload logic
