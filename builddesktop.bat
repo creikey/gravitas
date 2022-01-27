@@ -6,9 +6,14 @@ if exist builddesktop\ (
 ) else (
     mkdir builddesktop
     pushd builddesktop
-    cmake -DPLATFORM=Desktop -GNinja ..
+    cmake -DPLATFORM=Desktop -GNinja .. || goto :error
 )
-ninja
+ninja || goto :error
 popd
-builddesktop\projectname.exe
+builddesktop\projectname.exe || goto :error
 popd
+
+
+:error
+echo Failed with error #%errorlevel%.
+exit /b %errorlevel%
