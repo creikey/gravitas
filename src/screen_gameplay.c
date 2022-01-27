@@ -148,7 +148,8 @@ void ProcessEntity(Entity *entities, size_t i)
     }
 }
 
-void DrawEntity(Entity * entities, size_t i ) {
+void DrawEntity(Entity *entities, size_t i)
+{
     switch (entities[i].type)
     {
     case Obstacle:
@@ -213,7 +214,6 @@ void UpdateGameplayScreen(void)
 
         ProcessEntity(entities, i);
     }
-    
 }
 
 // Gameplay Screen Draw logic
@@ -227,7 +227,8 @@ void DrawGameplayScreen(void)
     {
         DrawEntity(entities, i);
     }
-    if(editing && creatingEntity) {
+    if (editing && creatingEntity)
+    {
         DrawEntity(&currentEntity, 0);
     }
     DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0, 0.35, WHITE);
