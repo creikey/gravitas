@@ -125,10 +125,10 @@ void InitGameplayScreen(void)
 Vector2 CorrectPosition(Vector2 position, Rectangle obstacle)
 {
     Vector2 normal = {0};
-    Vector2 obstacleCenter = {.x = obstacle.x + obstacle.width / 2.0, .y = obstacle.y + obstacle.height / 2.0};
+    Vector2 obstacleCenter = {.x = obstacle.x + obstacle.width / 2.0f, .y = obstacle.y + obstacle.height / 2.0f};
     Vector2 fromObstacleCenter = Vector2Subtract(position, obstacleCenter);
-    fromObstacleCenter.x = clamp(fromObstacleCenter.x, -obstacle.width / 2.0, obstacle.width / 2.0);
-    fromObstacleCenter.y = clamp(fromObstacleCenter.y, -obstacle.height / 2.0, obstacle.height / 2.0);
+    fromObstacleCenter.x = clamp(fromObstacleCenter.x, -obstacle.width / 2.0f, obstacle.width / 2.0f);
+    fromObstacleCenter.y = clamp(fromObstacleCenter.y, -obstacle.height / 2.0f, obstacle.height / 2.0f);
     Vector2 closestPointOnObstacle = Vector2Add(fromObstacleCenter, obstacleCenter);
     if (Vector2Distance(closestPointOnObstacle, position) < player_radius)
     {
@@ -172,7 +172,7 @@ void UpdateGameplayScreen(void)
 
     movement = Vector2Normalize(movement);
 
-    velocity = Vector2Lerp(velocity, Vector2Scale(movement, 400.0), delta * 9.0);
+    velocity = Vector2Lerp(velocity, Vector2Scale(movement, 400.0f), delta * 9.0f);
     position = Vector2Add(position, Vector2Scale(velocity, delta));
 
     // separate loops for gameplay and editing so editing can break early (deleting
@@ -231,7 +231,7 @@ void DrawGameplayScreen(void)
     {
         DrawEntity(&currentEntity, 0);
     }
-    DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0, 0.35, WHITE);
+    DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0f, 0.35f, WHITE);
 }
 
 // Gameplay Screen Unload logic
