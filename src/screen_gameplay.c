@@ -48,6 +48,7 @@ static const char *TypeNames[] = {
 union Data
 {
     Rectangle rect;
+    int empty_data[64]; // so I can add new fields without it breaking
 };
 
 typedef struct Entity
@@ -133,7 +134,8 @@ float clamp(float value, float min, float max)
     return value;
 }
 
-Vector2 WorldMousePos() {
+Vector2 WorldMousePos()
+{
     return Vector2Add(GetMousePosition(), Vector2Subtract(camera.target, camera.offset));
 }
 
@@ -332,11 +334,6 @@ void UpdateGameplayScreen(void)
 void DrawGameplayScreen(void)
 {
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){17, 17, 17, 255});
-    if (editing)
-    {
-        DrawText("Editing", 0, 0, 16, RED);
-        DrawText(TypeNames[currentType], 100, 0, 16, RED);
-    }
     BeginMode2D(camera);
 
     for (int i = 0; i < entities_len; i++)
@@ -350,6 +347,12 @@ void DrawGameplayScreen(void)
     DrawCircleV(position, player_radius, PINK);
     DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0f, 0.35f, WHITE);
     EndMode2D();
+
+    if (editing)
+    {
+        DrawText("Editing", 0, 0, 16, RED);
+        DrawText(TypeNames[currentType], 100, 0, 16, RED);
+    }
 }
 
 // Gameplay Screen Unload logic
