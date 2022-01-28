@@ -29,6 +29,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define SCREEN_SIZE 900 // screen assumed to be square. Used for camera offset
 const float player_radius = 18.0;
 
 enum Type
@@ -62,6 +63,7 @@ static enum Type currentType = Obstacle;
 
 static int finishScreen = 0;
 static Vector2 position = {.x = 200, .y = 300};
+static Camera2D camera;
 static Vector2 velocity = {0};
 static Vector2 fireExtinguisherPosition = {100, 100};
 static Texture fireExtinguisher;
@@ -71,6 +73,15 @@ static size_t entities_len = 0;
 //----------------------------------------------------------------------------------
 // Gameplay Screen Functions Definition
 //----------------------------------------------------------------------------------
+
+
+// returns whichever has greater magnitude
+float absmax(float a, float b) {
+    if(fabs(a) > fabs(b)) {
+        return a;
+    }
+    return b;
+}
 
 void RemoveEntity(int index)
 {
@@ -95,6 +106,17 @@ void LoadEntities(const char *path)
     }
     entities_len = bytesRead / sizeof(Entity);
     UnloadFileText(data);
+
+    // for debugging stuff, also put any programmatic level modifications here
+    /*
+    for(int i = 0; i < entities_len; i++) {
+        Rectangle r = entities[i].data.rect;
+        if(fabs(r.width) < 1.0) {
+            RemoveEntity(i);
+            break;
+        }
+        printf("%f %f %f %f\n", r.x, r.y, r.width, r.height);
+    }*/
 }
 
 float clamp(float value, float min, float max)
@@ -119,6 +141,12 @@ Vector2 Vector2Project(Vector2 a, Vector2 b)
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
+    camera = (Camera2D) {
+        .offset = (Vector2){.x = SCREEN_SIZE/2.0f, .y = SCREEN_SIZE/2.0f},
+        .target = position,
+        .rotation = 0.0,
+        .zoom = 1.0,
+    };
     if (FileExists("resources/saved.level"))
     {
         LoadEntities("resources/saved.level");
@@ -147,10 +175,6 @@ void InitGameplayScreen(void)
     }
 
     fireExtinguisher = LoadTexture("resources/Fire Extinguisher.png");
-}
-
-Vector2 CorrectPosition(Vector2 position, Rectangle obstacle)
-{
 }
 
 Rectangle FixNegativeRect(Rectangle rect)
@@ -215,12 +239,12 @@ void DrawEntity(Entity *entities, size_t i)
     }
 }
 
-// Gameplay Screen Update logic
 void UpdateGameplayScreen(void)
 {
     if (IsKeyPressed(KEY_TAB))
         editing = !editing;
 
+    camera.target = Vector2Lerp(camera.target, position, GetFrameTime()*5.0);
     float delta = GetFrameTime();
     Vector2 movement = {
         .x = (float)IsKeyDown(KEY_D) - (float)IsKeyDown(KEY_A),
@@ -265,6 +289,8 @@ void UpdateGameplayScreen(void)
         }
         currentEntity.data.rect.width = GetMousePosition().x - currentEntity.data.rect.x;
         currentEntity.data.rect.height = GetMousePosition().y - currentEntity.data.rect.y;
+        currentEntity.data.rect.width = absmax(3.0, currentEntity.data.rect.width);
+        currentEntity.data.rect.height = absmax(3.0, currentEntity.data.rect.height);
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
         {
             entities[entities_len] = currentEntity;
@@ -293,6 +319,12 @@ void UpdateGameplayScreen(void)
 void DrawGameplayScreen(void)
 {
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){17, 17, 17, 255});
+    if (editing)
+    {
+        DrawText("Editing", 0, 0, 16, RED);
+        DrawText(TypeNames[currentType], 100, 0, 16, RED);
+    }
+    BeginMode2D(camera);
 
     for (int i = 0; i < entities_len; i++)
     {
@@ -303,12 +335,8 @@ void DrawGameplayScreen(void)
         DrawEntity(&currentEntity, 0);
     }
     DrawCircleV(position, player_radius, PINK);
-    if (editing)
-    {
-        DrawText("Editing", 0, 0, 16, RED);
-        DrawText(TypeNames[currentType], 100, 0, 16, RED);
-    }
     DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0f, 0.35f, WHITE);
+    EndMode2D();
 }
 
 // Gameplay Screen Unload logic
