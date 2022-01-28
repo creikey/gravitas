@@ -26,6 +26,8 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "screens.h"
+#include <stddef.h>
+#include <stdio.h>
 
 const float player_radius = 18.0;
 
@@ -56,6 +58,7 @@ typedef struct Entity
 static bool editing = true;
 static Entity currentEntity;
 static bool creatingEntity = false;
+static enum Type currentType = Obstacle;
 
 static int finishScreen = 0;
 static Vector2 position = {.x = 200, .y = 300};
@@ -76,6 +79,22 @@ void RemoveEntity(int index)
         entities[i] = entities[i + 1];
     }
     entities_len--;
+}
+
+void SaveEntities(const char *path)
+{
+    SaveFileData(path, (void *)entities, entities_len * sizeof(Entity));
+}
+void LoadEntities(const char *path)
+{
+    unsigned int bytesRead;
+    unsigned char *data = LoadFileData(path, &bytesRead);
+    for (int i = 0; i < bytesRead / sizeof(Entity); i++)
+    {
+        entities[i] = ((Entity *)data)[i];
+    }
+    entities_len = bytesRead / sizeof(Entity);
+    UnloadFileText(data);
 }
 
 float clamp(float value, float min, float max)
@@ -100,42 +119,60 @@ Vector2 Vector2Project(Vector2 a, Vector2 b)
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
-    entities[0] = (Entity){
-        .type = Obstacle,
-        .data = (Rectangle){
-            .x = 400,
-            .y = 400,
-            .width = 100,
-            .height = 200,
-        },
-    };
-    entities[1] = (Entity){
-        .type = Obstacle,
-        .data = (Rectangle){
-            .x = 100,
-            .y = 400,
-            .width = 100,
-            .height = 200,
-        },
-    };
-    entities_len = 2;
+    if (FileExists("resources/saved.level"))
+    {
+        LoadEntities("resources/saved.level");
+    }
+    else
+    {
+        entities[0] = (Entity){
+            .type = Obstacle,
+            .data = (Rectangle){
+                .x = 400,
+                .y = 400,
+                .width = 100,
+                .height = 200,
+            },
+        };
+        entities[1] = (Entity){
+            .type = Obstacle,
+            .data = (Rectangle){
+                .x = 100,
+                .y = 400,
+                .width = 100,
+                .height = 200,
+            },
+        };
+        entities_len = 2;
+    }
+
     fireExtinguisher = LoadTexture("resources/Fire Extinguisher.png");
 }
 
 Vector2 CorrectPosition(Vector2 position, Rectangle obstacle)
 {
-    Vector2 normal = {0};
-    Vector2 obstacleCenter = {.x = obstacle.x + obstacle.width / 2.0f, .y = obstacle.y + obstacle.height / 2.0f};
-    Vector2 fromObstacleCenter = Vector2Subtract(position, obstacleCenter);
-    fromObstacleCenter.x = clamp(fromObstacleCenter.x, -obstacle.width / 2.0f, obstacle.width / 2.0f);
-    fromObstacleCenter.y = clamp(fromObstacleCenter.y, -obstacle.height / 2.0f, obstacle.height / 2.0f);
-    Vector2 closestPointOnObstacle = Vector2Add(fromObstacleCenter, obstacleCenter);
-    if (Vector2Distance(closestPointOnObstacle, position) < player_radius)
+}
+
+Rectangle FixNegativeRect(Rectangle rect)
+{
+    if (rect.width < 0.0)
     {
-        normal = Vector2Normalize(Vector2Subtract(position, closestPointOnObstacle));
-        position = Vector2Add(closestPointOnObstacle, Vector2Scale(normal, player_radius));
+        rect.x += rect.width;
+        rect.width *= -1.0;
     }
-    return position;
+    if (rect.height < 0.0)
+    {
+        rect.y += rect.height;
+        rect.height *= -1.0;
+    }
+    return rect;
+}
+
+// unlike the raylib function for this this one works on negative width and height
+bool RectHasPoint(Rectangle rect, Vector2 point)
+{
+    rect = FixNegativeRect(rect);
+    return CheckCollisionPointRec(point, rect);
 }
 
 void ProcessEntity(Entity *entities, size_t i)
@@ -143,17 +180,37 @@ void ProcessEntity(Entity *entities, size_t i)
     switch (entities[i].type)
     {
     case Obstacle:
-        position = CorrectPosition(position, entities[i].data.rect);
+        Rectangle obstacle = FixNegativeRect(entities[i].data.rect);
+        Vector2 normal = {0};
+        Vector2 newPosition = position;
+        {
+            Vector2 obstacleCenter = {.x = obstacle.x + obstacle.width / 2.0f, .y = obstacle.y + obstacle.height / 2.0f};
+            Vector2 fromObstacleCenter = Vector2Subtract(position, obstacleCenter);
+            fromObstacleCenter.x = clamp(fromObstacleCenter.x, -obstacle.width / 2.0f, obstacle.width / 2.0f);
+            fromObstacleCenter.y = clamp(fromObstacleCenter.y, -obstacle.height / 2.0f, obstacle.height / 2.0f);
+            Vector2 closestPointOnObstacle = Vector2Add(fromObstacleCenter, obstacleCenter);
+            if (Vector2Distance(closestPointOnObstacle, position) < player_radius)
+            {
+                normal = Vector2Normalize(Vector2Subtract(position, closestPointOnObstacle));
+                newPosition = Vector2Add(closestPointOnObstacle, Vector2Scale(normal, player_radius));
+            }
+        }
+        position = newPosition;
+        velocity = Vector2Reflect(velocity, normal);
         break;
     }
 }
 
 void DrawEntity(Entity *entities, size_t i)
 {
-    switch (entities[i].type)
+    Entity e = entities[i];
+    switch (e.type)
     {
     case Obstacle:
-        DrawRectanglePro(entities[i].data.rect, (Vector2){0}, 0.0, GRAY);
+        DrawRectanglePro(FixNegativeRect(e.data.rect), (Vector2){0}, 0.0, GRAY);
+        break;
+    case Ground:
+        DrawRectanglePro(FixNegativeRect(e.data.rect), (Vector2){0}, 0.0, GREEN);
         break;
     }
 }
@@ -172,16 +229,37 @@ void UpdateGameplayScreen(void)
 
     movement = Vector2Normalize(movement);
 
-    velocity = Vector2Lerp(velocity, Vector2Scale(movement, 400.0f), delta * 9.0f);
+    bool onGround = false;
+    for (int i = 0; i < entities_len; i++)
+    {
+        if (entities[i].type == Ground && RectHasPoint(entities[i].data.rect, position))
+            onGround = true;
+        ProcessEntity(entities, i);
+    }
+    if (onGround)
+        velocity = Vector2Lerp(velocity, Vector2Scale(movement, 400.0f), delta * 9.0f);
     position = Vector2Add(position, Vector2Scale(velocity, delta));
 
     // separate loops for gameplay and editing so editing can break early (deleting
     // multiple entities per loop I can't be bothered to implement)
     if (editing)
     {
+        currentType += (int)GetMouseWheelMove();
+        currentType %= MAX_TYPE + 1;
+        if (currentType < 0)
+            currentType = MAX_TYPE;
+
+        if (IsKeyPressed(KEY_F1))
+        {
+            SaveEntities("resources/saved.level");
+            LoadEntities("resources/saved.level");
+        }
+        if(IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+            position = GetMousePosition();
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
             creatingEntity = true;
+            currentEntity.type = currentType;
             currentEntity.data.rect.x = GetMousePosition().x;
             currentEntity.data.rect.y = GetMousePosition().y;
         }
@@ -199,7 +277,8 @@ void UpdateGameplayScreen(void)
             switch (entities[i].type)
             {
             case Obstacle:
-                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && CheckCollisionPointRec(GetMousePosition(), entities[i].data.rect))
+            case Ground:
+                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && RectHasPoint(entities[i].data.rect, GetMousePosition()))
                 {
                     RemoveEntity(i);
                     break;
@@ -208,21 +287,13 @@ void UpdateGameplayScreen(void)
             }
         }
     }
-
-    for (int i = 0; i < entities_len; i++)
-    {
-
-        ProcessEntity(entities, i);
-    }
 }
 
 // Gameplay Screen Draw logic
 void DrawGameplayScreen(void)
 {
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){17, 17, 17, 255});
-    if (editing)
-        DrawText("Editing", 0, 0, 16, RED);
-    DrawCircleV(position, player_radius, PINK);
+
     for (int i = 0; i < entities_len; i++)
     {
         DrawEntity(entities, i);
@@ -230,6 +301,12 @@ void DrawGameplayScreen(void)
     if (editing && creatingEntity)
     {
         DrawEntity(&currentEntity, 0);
+    }
+    DrawCircleV(position, player_radius, PINK);
+    if (editing)
+    {
+        DrawText("Editing", 0, 0, 16, RED);
+        DrawText(TypeNames[currentType], 100, 0, 16, RED);
     }
     DrawTextureEx(fireExtinguisher, fireExtinguisherPosition, 0.0f, 0.35f, WHITE);
 }
