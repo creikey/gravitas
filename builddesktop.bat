@@ -16,4 +16,8 @@ popd
 
 :error
 echo Failed with error #%errorlevel%.
+popd
+popd
+popd
+popd
 exit /b %errorlevel%
