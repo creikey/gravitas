@@ -74,10 +74,11 @@ static size_t entities_len = 0;
 // Gameplay Screen Functions Definition
 //----------------------------------------------------------------------------------
 
-
 // returns whichever has greater magnitude
-float absmax(float a, float b) {
-    if(fabs(a) > fabs(b)) {
+float absmax(float a, float b)
+{
+    if (fabs(a) > fabs(b))
+    {
         return a;
     }
     return b;
@@ -141,8 +142,8 @@ Vector2 Vector2Project(Vector2 a, Vector2 b)
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
-    camera = (Camera2D) {
-        .offset = (Vector2){.x = SCREEN_SIZE/2.0f, .y = SCREEN_SIZE/2.0f},
+    camera = (Camera2D){
+        .offset = (Vector2){.x = SCREEN_SIZE / 2.0f, .y = SCREEN_SIZE / 2.0f},
         .target = position,
         .rotation = 0.0,
         .zoom = 1.0,
@@ -204,6 +205,7 @@ void ProcessEntity(Entity *entities, size_t i)
     switch (entities[i].type)
     {
     case Obstacle:
+    {
         Rectangle obstacle = FixNegativeRect(entities[i].data.rect);
         Vector2 normal = {0};
         Vector2 newPosition = position;
@@ -223,6 +225,7 @@ void ProcessEntity(Entity *entities, size_t i)
         velocity = Vector2Reflect(velocity, normal);
         break;
     }
+    }
 }
 
 void DrawEntity(Entity *entities, size_t i)
@@ -231,11 +234,15 @@ void DrawEntity(Entity *entities, size_t i)
     switch (e.type)
     {
     case Obstacle:
+    {
         DrawRectanglePro(FixNegativeRect(e.data.rect), (Vector2){0}, 0.0, GRAY);
         break;
+    }
     case Ground:
+    {
         DrawRectanglePro(FixNegativeRect(e.data.rect), (Vector2){0}, 0.0, GREEN);
         break;
+    }
     }
 }
 
@@ -244,7 +251,7 @@ void UpdateGameplayScreen(void)
     if (IsKeyPressed(KEY_TAB))
         editing = !editing;
 
-    camera.target = Vector2Lerp(camera.target, position, GetFrameTime()*5.0);
+    camera.target = Vector2Lerp(camera.target, position, GetFrameTime() * 5.0);
     float delta = GetFrameTime();
     Vector2 movement = {
         .x = (float)IsKeyDown(KEY_D) - (float)IsKeyDown(KEY_A),
@@ -278,7 +285,7 @@ void UpdateGameplayScreen(void)
             SaveEntities("resources/saved.level");
             LoadEntities("resources/saved.level");
         }
-        if(IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+        if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
             position = GetMousePosition();
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
@@ -304,12 +311,14 @@ void UpdateGameplayScreen(void)
             {
             case Obstacle:
             case Ground:
+            {
                 if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && RectHasPoint(entities[i].data.rect, GetMousePosition()))
                 {
                     RemoveEntity(i);
                     break;
                 }
                 break;
+            }
             }
         }
     }
