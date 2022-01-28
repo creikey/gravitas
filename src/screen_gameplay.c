@@ -133,6 +133,10 @@ float clamp(float value, float min, float max)
     return value;
 }
 
+Vector2 WorldMousePos() {
+    return Vector2Add(GetMousePosition(), Vector2Subtract(camera.target, camera.offset));
+}
+
 // Project a onto b
 Vector2 Vector2Project(Vector2 a, Vector2 b)
 {
@@ -286,16 +290,16 @@ void UpdateGameplayScreen(void)
             LoadEntities("resources/saved.level");
         }
         if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
-            position = GetMousePosition();
+            position = WorldMousePos();
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
             creatingEntity = true;
             currentEntity.type = currentType;
-            currentEntity.data.rect.x = GetMousePosition().x;
-            currentEntity.data.rect.y = GetMousePosition().y;
+            currentEntity.data.rect.x = WorldMousePos().x;
+            currentEntity.data.rect.y = WorldMousePos().y;
         }
-        currentEntity.data.rect.width = GetMousePosition().x - currentEntity.data.rect.x;
-        currentEntity.data.rect.height = GetMousePosition().y - currentEntity.data.rect.y;
+        currentEntity.data.rect.width = WorldMousePos().x - currentEntity.data.rect.x;
+        currentEntity.data.rect.height = WorldMousePos().y - currentEntity.data.rect.y;
         currentEntity.data.rect.width = absmax(3.0, currentEntity.data.rect.width);
         currentEntity.data.rect.height = absmax(3.0, currentEntity.data.rect.height);
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
@@ -312,7 +316,7 @@ void UpdateGameplayScreen(void)
             case Obstacle:
             case Ground:
             {
-                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && RectHasPoint(entities[i].data.rect, GetMousePosition()))
+                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && RectHasPoint(entities[i].data.rect, WorldMousePos()))
                 {
                     RemoveEntity(i);
                     break;
