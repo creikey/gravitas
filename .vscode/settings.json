@@ -2,7 +2,8 @@
     "files.associations": {
         "raylib.h": "c",
         "screens.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "stdlib.h": "c"
     },
     "cmake.configureOnOpen": false
 }
