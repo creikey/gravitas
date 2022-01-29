@@ -97,6 +97,11 @@ typedef struct Entity
     };
 } Entity;
 
+
+enum ParticleType {
+    RetardantParticle,
+    FireParticle,
+};
 typedef struct Particle
 {
     Vector2 pos;
@@ -104,6 +109,7 @@ typedef struct Particle
     float lifetime;
     float max_lifetime; // used to compute color alpha
     Color color;
+    enum ParticleType type;
 } Particle;
 
 // editor state
@@ -427,15 +433,17 @@ void ProcessEntity(Entity *e)
         e->player.k.pos = Vector2Add(e->player.k.pos, Vector2Scale(e->player.k.vel, delta));
 
         bool inFire = false;
+        float fireLeft = 0.0;
         for(int i = 0; i < entitiesLen; i++) {
             if(entities[i].type == Fire && RectHasPoint(entities[i].fire.rect, e->player.k.pos)) {
                 inFire = true;
+                fireLeft = entities[i].fire.fireLeft;
                 break;
             }
         }
 
         if(inFire) {
-            e->player.health -= GetFrameTime() / 0.5;
+            e->player.health -= Lerp(GetFrameTime() / 0.5, GetFrameTime() / 2.5, 1.0 - fireLeft);
         } else if (!e->player.k.onGround)
         {
             e->player.health -= GetFrameTime() / 3.0;
@@ -499,6 +507,7 @@ void ProcessEntity(Entity *e)
                     .color = (Color){255, 255, 255, 255},
                     .lifetime = 3.0,
                     .max_lifetime = 3.0,
+                    .type = RetardantParticle,
                 });
             }
         }
@@ -507,7 +516,9 @@ void ProcessEntity(Entity *e)
     case Fire:
     {
         e->fire.fireParticleTimer += GetFrameTime();
-        if (e->fire.fireParticleTimer > 0.05)
+        e->fire.fireLeft = clamp(e->fire.fireLeft, 0.0, 1.0);
+        printf("%f\n", e->fire.fireLeft);
+        if (e->fire.fireParticleTimer > Lerp(0.05, 0.5, 1.0 - e->fire.fireLeft))
         {
             SpawnParticle((Particle){
                 .pos = (Vector2){
@@ -518,6 +529,7 @@ void ProcessEntity(Entity *e)
                 .color = (Color){255, 0, 0, 255},
                 .lifetime = 4.0,
                 .max_lifetime = 10.0,
+                .type = FireParticle,
             });
             e->fire.fireParticleTimer = 0.0;
         }
@@ -547,7 +559,7 @@ void DrawEntity(Entity e)
     }
     case Fire:
     {
-        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0, (Color){230, 41, 55, 50});
+        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0,ColorLerp((Color){230, 41, 55, 50}, (Color){50, 41, 255, 80}, 1.0 - e.fire.fireLeft));
         break;
     }
     case Extinguisher:
@@ -605,6 +617,9 @@ void UpdateGameplayScreen(void)
             {
                 Entity toAdd = {0};
                 toAdd.type = currentType;
+                if(currentType == Fire) {
+                    toAdd.fire.fireLeft = 1.0;
+                }
                 if (currentType == Ground || currentType == Obstacle || currentType == Fire)
                 {
                     toAdd.ground.x = WorldMousePos().x;
@@ -675,6 +690,11 @@ void UpdateGameplayScreen(void)
             {
                 particles[i].vel = (Vector2){0};
                 break;
+            } else if(particles[i].type == RetardantParticle && entities[ii].type == Fire && RectHasPoint(entities[ii].fire.rect, particles[i].pos)) {
+                particles[i].vel = (Vector2){0};
+                particles[i].lifetime /= 2.0;
+                entities[ii].fire.fireLeft -= 0.001;
+                entities[ii].fire.fireLeft = clamp(entities[ii].fire.fireLeft, 0.0, 1.0);
             }
         }
         particles[i].lifetime -= GetFrameTime();
