@@ -229,7 +229,7 @@ void LoadEntities(const char *path, bool setSpawnPoint)
     }
     curNextEntityID = curNextEntityID + 1;
     entitiesLen = bytesRead / sizeof(Entity);
-    UnloadFileText((char*)data);
+    UnloadFileText((char *)data);
 
     if (setSpawnPoint)
     {
@@ -240,6 +240,13 @@ void LoadEntities(const char *path, bool setSpawnPoint)
 
     camera.target = GetPlayerEntity()->player.k.pos;
 
+    // delete stuff that's flying away
+    // for(int i = 0; i < entitiesLen; i++) {
+    //     if(entities[i].type == Extinguisher && fabs(entities[i].extinguisher.info.pos.x) > 20000.0) {
+    //         DeleteEntityIndex(i);
+    //         break;
+    //     }
+    // }
     // for debugging stuff, also put any programmatic level modifications here
     // for (int i = 0; i < entitiesLen; i++)
     // {
@@ -281,7 +288,6 @@ void DrawTexCentered(Texture t, Vector2 pos, float scale)
 {
     DrawTexCenteredWithCol(t, pos, scale, WHITE);
 }
-
 
 float clamp(float value, float min, float max)
 {
@@ -487,7 +493,7 @@ void ProcessEntity(Entity *e)
             {
                 Vector2 extraVelocity = Vector2Scale(Vector2Normalize(Vector2Subtract(WorldMousePos(), e->player.k.pos)), 250.0);
                 GetEntity(e->player.grabbedEntity)->extinguisher.info.vel = Vector2Add(e->player.k.vel, extraVelocity);
-                e->player.k.vel = Vector2Add(e->player.k.vel, Vector2Scale(extraVelocity, -1.0));
+                e->player.k.vel = Vector2Add(e->player.k.vel, Vector2Scale(extraVelocity, -1.5));
                 e->player.grabbedEntity = -1;
             }
         }
@@ -496,6 +502,10 @@ void ProcessEntity(Entity *e)
     }
     case Extinguisher:
     {
+        if (fabs(e->extinguisher.info.vel.x) > 10.0)
+        {
+            printf("%f %f\n", e->extinguisher.info.pos.x, e->extinguisher.info.pos.y);
+        }
         if (GetPlayerEntity()->player.grabbedEntity != e->id)
         {
             e->extinguisher.info = GlideAndBounce(e->extinguisher.info, 0.5f);
@@ -508,12 +518,13 @@ void ProcessEntity(Entity *e)
         {
             if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
             {
-                if(e->extinguisher.amountUsed >= 0.99f) {
+                if (e->extinguisher.amountUsed >= 0.99f)
+                {
                     break;
                 }
                 Vector2 toMouse = Vector2Subtract(WorldMousePos(), e->extinguisher.info.pos);
                 Vector2 solidVelocity = Vector2Scale(Vector2Normalize(toMouse), 200.0f);
-                e->extinguisher.amountUsed += GetFrameTime()/2.0f;
+                e->extinguisher.amountUsed += GetFrameTime() / 2.0f;
                 e->extinguisher.amountUsed = clamp(e->extinguisher.amountUsed, 0.0f, 1.0f);
                 GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime() * 3.0f));
                 SpawnParticle((Particle){
@@ -532,25 +543,29 @@ void ProcessEntity(Entity *e)
     {
         e->fire.fireParticleTimer += GetFrameTime();
         e->fire.fireLeft = clamp(e->fire.fireLeft, 0.0, 1.0);
-        if (e->fire.fireParticleTimer > Lerp(0.05f, 0.5f, 1.0f - e->fire.fireLeft))
+        // don't generate particles if offscreen
+        if (Vector2Distance((Vector2){.x = e->fire.rect.x, .y = e->fire.rect.y}, GetPlayerEntity()->player.k.pos) < 2000.0)
         {
-            SpawnParticle((Particle){
-                .pos = (Vector2){
-                    .x = RandFloat(e->fire.rect.x, e->fire.rect.x + e->fire.rect.width),
-                    .y = RandFloat(e->fire.rect.y, e->fire.rect.y + e->fire.rect.height),
-                },
-                .vel = Vector2Rotate((Vector2){.x = 20.0, .y = 0.0}, RandFloat(-2.0 * PI, 2.0 * PI)),
-                .color = (Color){255, 0, 0, 255},
-                .lifetime = 4.0,
-                .max_lifetime = 10.0,
-                .type = FireParticle,
-            });
-            e->fire.fireParticleTimer = 0.0;
+            if (e->fire.fireParticleTimer > Lerp(0.05f, 0.5f, 1.0f - e->fire.fireLeft))
+            {
+                SpawnParticle((Particle){
+                    .pos = (Vector2){
+                        .x = RandFloat(e->fire.rect.x, e->fire.rect.x + e->fire.rect.width),
+                        .y = RandFloat(e->fire.rect.y, e->fire.rect.y + e->fire.rect.height),
+                    },
+                    .vel = Vector2Rotate((Vector2){.x = 20.0, .y = 0.0}, RandFloat(-2.0 * PI, 2.0 * PI)),
+                    .color = (Color){255, 0, 0, 255},
+                    .lifetime = 4.0,
+                    .max_lifetime = 10.0,
+                    .type = FireParticle,
+                });
+                e->fire.fireParticleTimer = 0.0;
+            }
         }
         break;
     }
     default:
-    break;
+        break;
     }
 }
 
@@ -565,7 +580,7 @@ void DrawEntity(Entity e)
     }
     case Obstacle:
     {
-        DrawRectanglePro(FixNegativeRect(e.obstacle), (Vector2){0}, 0.0, (Color){ 0, 40, 70, 255 });
+        DrawRectanglePro(FixNegativeRect(e.obstacle), (Vector2){0}, 0.0, (Color){0, 40, 70, 255});
         break;
     }
     case Ground:
@@ -686,9 +701,12 @@ void UpdateGameplayScreen(void)
             }
         }
 
-        if (IsKeyPressed(KEY_E)) {
-            for(int i = 0; i < entitiesLen; i++) {
-                if(entities[i].type == Extinguisher && Vector2Distance(entities[i].extinguisher.info.pos, WorldMousePos()) < 15.0f) {
+        if (IsKeyPressed(KEY_E))
+        {
+            for (int i = 0; i < entitiesLen; i++)
+            {
+                if (entities[i].type == Extinguisher && Vector2Distance(entities[i].extinguisher.info.pos, WorldMousePos()) < 15.0f)
+                {
                     entities[i].extinguisher.amountUsed = 1.0f - entities[i].extinguisher.amountUsed;
                 }
             }
@@ -729,7 +747,7 @@ void UpdateGameplayScreen(void)
                     break;
                 }
                 default:
-                break;
+                    break;
                 }
             }
         }
