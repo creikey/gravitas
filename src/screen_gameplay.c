@@ -46,6 +46,7 @@ typedef struct PlayerData
 {
     KinematicInfo k;
     int grabbedEntity;
+    float health;
 } PlayerData;
 typedef Rectangle ObstacleData;
 typedef Rectangle GroundData;
@@ -103,6 +104,7 @@ static Entity *currentEntity = NULL;
 
 // game state
 static int finishScreen = 0;
+static Vector2 spawnPoint = {0};
 static Camera2D camera;
 static int frameID = 0;
 
@@ -185,7 +187,7 @@ void SaveEntities(const char *path)
 {
     SaveFileData(path, (void *)entities, entitiesLen * sizeof(Entity));
 }
-void LoadEntities(const char *path)
+void LoadEntities(const char *path, bool setSpawnPoint)
 {
     unsigned int bytesRead;
     unsigned char *data = LoadFileData(path, &bytesRead);
@@ -197,6 +199,12 @@ void LoadEntities(const char *path)
     curNextEntityID = curNextEntityID + 1;
     entitiesLen = bytesRead / sizeof(Entity);
     UnloadFileText(data);
+
+    if(setSpawnPoint) {
+        spawnPoint = GetPlayerEntity()->player.k.pos;
+    }
+
+    GetPlayerEntity()->player.k.pos = spawnPoint;
 
     camera.target = GetPlayerEntity()->player.k.pos;
 
@@ -221,6 +229,15 @@ float absmax(float a, float b)
         return a;
     }
     return b;
+}
+
+Color ColorLerp(Color from, Color to, float factor) {
+    return (Color) {
+        .r = (unsigned char)Lerp((float)from.r, (float)to.r, factor),
+        .g = (unsigned char)Lerp((float)from.b, (float)to.g, factor),
+        .b = (unsigned char)Lerp((float)from.g, (float)to.b, factor),
+        .a = (unsigned char)Lerp((float)from.a, (float)to.a, factor),
+    };
 }
 
 void DrawTexCentered(Texture t, Vector2 pos, float scale)
@@ -273,7 +290,7 @@ void InitGameplayScreen(void)
     };
     if (FileExists(level_name))
     {
-        LoadEntities(level_name);
+        LoadEntities(level_name, true);
     }
     else
     {
@@ -300,6 +317,7 @@ void InitGameplayScreen(void)
         };
         curNextEntityID = 2;
         entitiesLen = 2;
+        spawnPoint = GetPlayerEntity()->player.k.pos;
     }
 }
 
@@ -373,10 +391,23 @@ void ProcessEntity(Entity *e)
         };
 
         movement = Vector2Normalize(movement);
+        bool onGroundBefore = e->player.k.onGround;
         e->player.k = GlideAndBounce(e->player.k, 1.0f);
+        if(!onGroundBefore && e->player.k.onGround) {
+            spawnPoint = e->player.k.pos;
+        }
         if (e->player.k.onGround)
             e->player.k.vel = Vector2Lerp(e->player.k.vel, Vector2Scale(movement, 400.0f), delta * 9.0f);
         e->player.k.pos = Vector2Add(e->player.k.pos, Vector2Scale(e->player.k.vel, delta));
+
+        if(!e->player.k.onGround) {
+            e->player.health -= GetFrameTime()/3.0;
+        } else {
+            e->player.health += GetFrameTime()/0.5;
+        }
+
+        e->player.health = clamp(e->player.health, 0.0, 1.0);
+ 
 
         if (e->player.grabbedEntity == -1)
         {
@@ -470,11 +501,17 @@ void UpdateGameplayScreen(void)
         editing = !editing;
     
     if (IsKeyPressed(KEY_R))
-        LoadEntities(level_name);
+        LoadEntities(level_name, false);
 
     for (int i = 0; i < entitiesLen; i++)
     {
         ProcessEntity(&entities[i]);
+    }
+
+    // worried about calling load entities from within the entity processing loop
+    if(GetPlayerEntity()->player.health <= 0.0) {
+        LoadEntities(level_name, false);
+        GetPlayerEntity()->player.health = 1.0;
     }
 
     // separate loops for gameplay and editing so editing can break early (deleting
@@ -489,7 +526,7 @@ void UpdateGameplayScreen(void)
         if (IsKeyPressed(KEY_F1))
         {
             SaveEntities(level_name);
-            LoadEntities(level_name);
+            LoadEntities(level_name, false);
         }
         if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
             GetPlayerEntity()->player.k.pos = WorldMousePos();
@@ -579,7 +616,8 @@ void UpdateGameplayScreen(void)
 void DrawGameplayScreen(void)
 {
     // background color not moved by camera
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){17, 17, 17, 255});
+    Color bg = ColorLerp((Color){17, 17, 17, 255}, (Color){205, 50, 75, 255}, 1.0  - GetPlayerEntity()->player.health);
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), bg);
 
     BeginMode2D(camera);
     
