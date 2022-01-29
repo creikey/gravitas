@@ -502,10 +502,11 @@ void ProcessEntity(Entity *e)
     }
     case Extinguisher:
     {
-        if (fabs(e->extinguisher.info.vel.x) > 10.0)
-        {
-            printf("%f %f\n", e->extinguisher.info.pos.x, e->extinguisher.info.pos.y);
-        }
+        // detect flying fire extinguishers
+        // if (fabs(e->extinguisher.info.vel.x) > 10.0)
+        // {
+        //     printf("%f %f\n", e->extinguisher.info.pos.x, e->extinguisher.info.pos.y);
+        // }
         if (GetPlayerEntity()->player.grabbedEntity != e->id)
         {
             e->extinguisher.info = GlideAndBounce(e->extinguisher.info, 0.5f);
