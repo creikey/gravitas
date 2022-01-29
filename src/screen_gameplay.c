@@ -122,7 +122,7 @@ typedef struct Particle
 } Particle;
 
 // editor state
-static bool editing = true;
+static bool editing = false;
 static int currentType = 0;
 static Entity *currentEntity = NULL;
 
@@ -134,7 +134,7 @@ static int frameID = 0;
 
 // entity stuff
 typedef int ID;
-static Entity entities[100];
+static Entity entities[1000];
 static int entitiesLen = 0;
 static ID curNextEntityID = 0;
 
@@ -607,7 +607,7 @@ void UpdateGameplayScreen(void)
 
     // worried about calling load entities from within the entity processing loop
     // so I put it here
-    if (GetPlayerEntity()->player.health <= 0.0)
+    if (GetPlayerEntity()->player.health <= 0.0 && !editing)
     {
         LoadEntities(level_name, false);
         GetPlayerEntity()->player.health = 1.0;
@@ -804,7 +804,7 @@ void DrawGameplayScreen(void)
 
     if (editing)
     {
-        DrawText("Editing Mode\nScroll to change target\nClick to place\nRight click to delete\nMiddle click to teleport\nIt saves in browser storage or something idk", 0, 0, 16, RED);
+        DrawText("Editing Mode\nScroll to change target\nClick to place\nRight click to delete\nMiddle click to teleport\nIt saves in browser storage or something idk I made the levels with a desktop build", 0, 0, 16, RED);
         DrawText(TypeNames[currentType], 200, 0, 16, RED);
     }
 }
