@@ -61,6 +61,11 @@ typedef struct ExtinguisherData
     KinematicInfo info;
     float amountLeft;
 } ExtinguisherData;
+typedef struct HelpTextData
+{
+    Vector2 pos;
+    char text[100];
+} HelpTextData;
 
 // Entity types
 enum Type
@@ -70,16 +75,18 @@ enum Type
     Ground,
     Extinguisher,
     Fire,
+    HelpText,
 
     // UPDATE MAX_TYPE WHEN YOU CHANGE THIS
 };
-#define MAX_TYPE Fire
+#define MAX_TYPE HelpText
 static const char *TypeNames[] = {
     "Player",
     "Obstacle",
     "Ground",
     "Extinguisher",
     "Fire",
+    "Help Text",
 };
 
 typedef struct Entity
@@ -93,12 +100,13 @@ typedef struct Entity
         GroundData ground;
         ExtinguisherData extinguisher;
         FireData fire;
+        HelpTextData help;
         int empty_data[64]; // so I can add new fields without it breaking
     };
 } Entity;
 
-
-enum ParticleType {
+enum ParticleType
+{
     RetardantParticle,
     FireParticle,
 };
@@ -434,17 +442,21 @@ void ProcessEntity(Entity *e)
 
         bool inFire = false;
         float fireLeft = 0.0;
-        for(int i = 0; i < entitiesLen; i++) {
-            if(entities[i].type == Fire && RectHasPoint(entities[i].fire.rect, e->player.k.pos)) {
+        for (int i = 0; i < entitiesLen; i++)
+        {
+            if (entities[i].type == Fire && RectHasPoint(entities[i].fire.rect, e->player.k.pos))
+            {
                 inFire = true;
                 fireLeft = entities[i].fire.fireLeft;
                 break;
             }
         }
 
-        if(inFire) {
+        if (inFire)
+        {
             e->player.health -= Lerp(GetFrameTime() / 0.5, GetFrameTime() / 2.5, 1.0 - fireLeft);
-        } else if (!e->player.k.onGround)
+        }
+        else if (!e->player.k.onGround)
         {
             e->player.health -= GetFrameTime() / 3.0;
         }
@@ -517,7 +529,6 @@ void ProcessEntity(Entity *e)
     {
         e->fire.fireParticleTimer += GetFrameTime();
         e->fire.fireLeft = clamp(e->fire.fireLeft, 0.0, 1.0);
-        printf("%f\n", e->fire.fireLeft);
         if (e->fire.fireParticleTimer > Lerp(0.05, 0.5, 1.0 - e->fire.fireLeft))
         {
             SpawnParticle((Particle){
@@ -559,12 +570,17 @@ void DrawEntity(Entity e)
     }
     case Fire:
     {
-        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0,ColorLerp((Color){230, 41, 55, 50}, (Color){50, 41, 255, 80}, 1.0 - e.fire.fireLeft));
+        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0, ColorLerp((Color){230, 41, 55, 50}, (Color){50, 41, 255, 80}, 1.0 - e.fire.fireLeft));
         break;
     }
     case Extinguisher:
     {
         DrawTexCentered(textures[EXTINGUISHER_TEXTURE], e.extinguisher.info.pos, 0.35f);
+        break;
+    }
+    case HelpText:
+    {
+        DrawText(e.help.text, e.help.pos.x, e.help.pos.y, 24.0, RED);
         break;
     }
     }
@@ -576,7 +592,7 @@ void UpdateGameplayScreen(void)
     if (IsKeyPressed(KEY_TAB))
         editing = !editing;
 
-    if (IsKeyPressed(KEY_R))
+    if ((editing && IsKeyPressed(KEY_F2)) || (!editing && IsKeyPressed(KEY_R)))
         LoadEntities(level_name, false);
 
     for (int i = 0; i < entitiesLen; i++)
@@ -617,10 +633,11 @@ void UpdateGameplayScreen(void)
             {
                 Entity toAdd = {0};
                 toAdd.type = currentType;
-                if(currentType == Fire) {
+                if (currentType == Fire)
+                {
                     toAdd.fire.fireLeft = 1.0;
                 }
-                if (currentType == Ground || currentType == Obstacle || currentType == Fire)
+                if (currentType == Ground || currentType == Obstacle || currentType == Fire || currentType == HelpText)
                 {
                     toAdd.ground.x = WorldMousePos().x;
                     toAdd.ground.y = WorldMousePos().y;
@@ -634,16 +651,34 @@ void UpdateGameplayScreen(void)
             }
         }
 
-        if (currentEntity != NULL && (currentEntity->type == Ground || currentEntity->type == Obstacle || currentEntity->type == Fire))
+        if (currentEntity != NULL && currentEntity->type == HelpText)
         {
-            currentEntity->ground.width = WorldMousePos().x - currentEntity->ground.x;
-            currentEntity->ground.height = WorldMousePos().y - currentEntity->ground.y;
-            currentEntity->ground.width = absmax(3.0, currentEntity->ground.width);
-            currentEntity->ground.height = absmax(3.0, currentEntity->ground.height);
+            char charPressed = GetCharPressed();
+            while (charPressed != 0)
+            {
+                unsigned int len = TextLength(currentEntity->help.text);
+                currentEntity->help.text[len] = charPressed;
+                currentEntity->help.text[len + 1] = '\0';
+                charPressed = GetCharPressed();
+            }
+            if (IsKeyPressed(KEY_ENTER))
+            {
+                currentEntity = NULL;
+            }
         }
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+        else
         {
-            currentEntity = NULL;
+            if (currentEntity != NULL && (currentEntity->type == Ground || currentEntity->type == Obstacle || currentEntity->type == Fire))
+            {
+                currentEntity->ground.width = WorldMousePos().x - currentEntity->ground.x;
+                currentEntity->ground.height = WorldMousePos().y - currentEntity->ground.y;
+                currentEntity->ground.width = absmax(3.0, currentEntity->ground.width);
+                currentEntity->ground.height = absmax(3.0, currentEntity->ground.height);
+            }
+            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+            {
+                currentEntity = NULL;
+            }
         }
 
         if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
@@ -657,6 +692,15 @@ void UpdateGameplayScreen(void)
                 case Fire:
                 {
                     if (RectHasPoint(entities[i].ground, WorldMousePos()))
+                    {
+                        DeleteEntityIndex(i);
+                        break;
+                    }
+                    break;
+                }
+                case HelpText:
+                {
+                    if (Vector2Distance(entities[i].help.pos, WorldMousePos()) < 30.0f)
                     {
                         DeleteEntityIndex(i);
                         break;
@@ -690,7 +734,9 @@ void UpdateGameplayScreen(void)
             {
                 particles[i].vel = (Vector2){0};
                 break;
-            } else if(particles[i].type == RetardantParticle && entities[ii].type == Fire && RectHasPoint(entities[ii].fire.rect, particles[i].pos)) {
+            }
+            else if (particles[i].type == RetardantParticle && entities[ii].type == Fire && RectHasPoint(entities[ii].fire.rect, particles[i].pos))
+            {
                 particles[i].vel = (Vector2){0};
                 particles[i].lifetime /= 2.0;
                 entities[ii].fire.fireLeft -= 0.001;
