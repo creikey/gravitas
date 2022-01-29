@@ -30,6 +30,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// emscripten?? why no max
+#ifndef max 
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
 #define SCREEN_SIZE 900 // screen assumed to be square. Used for camera offset
 const float player_radius = 18.0;
 const float player_grab_radius = 50.0;
@@ -493,7 +498,7 @@ void ProcessEntity(Entity *e)
             {
                 Vector2 extraVelocity = Vector2Scale(Vector2Normalize(Vector2Subtract(WorldMousePos(), e->player.k.pos)), 250.0);
                 GetEntity(e->player.grabbedEntity)->extinguisher.info.vel = Vector2Add(e->player.k.vel, extraVelocity);
-                e->player.k.vel = Vector2Add(e->player.k.vel, Vector2Scale(extraVelocity, -1.5));
+                e->player.k.vel = Vector2Add(e->player.k.vel, Vector2Scale(extraVelocity, -2.0));
                 e->player.grabbedEntity = -1;
             }
         }
