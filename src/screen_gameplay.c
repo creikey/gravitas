@@ -87,6 +87,15 @@ typedef struct Entity
     };
 } Entity;
 
+
+typedef struct Particle {
+    Vector2 pos;
+    Vector2 vel;
+    float lifetime;
+    float max_lifetime; // used to compute color alpha
+    Color color;
+} Particle;
+
 // editor state
 static bool editing = true;
 static int currentType = 0;
@@ -102,6 +111,12 @@ typedef int ID;
 static Entity entities[100];
 static size_t entitiesLen = 0;
 static ID curNextEntityID = 0;
+
+// particles
+#define MAX_PARTICLES 1000
+#define PARTICLE_RADIUS 17.0
+static Particle particles[MAX_PARTICLES];
+static int curParticleIndex = 0;
 
 int GetEntityIndex(ID id)
 {
@@ -182,7 +197,7 @@ void LoadEntities(const char *path)
     curNextEntityID = curNextEntityID + 1;
     entitiesLen = bytesRead / sizeof(Entity);
     UnloadFileText(data);
-    
+
     camera.target = GetPlayerEntity()->player.k.pos;
 
     // for debugging stuff, also put any programmatic level modifications here
@@ -400,6 +415,22 @@ void ProcessEntity(Entity *e)
                 e->extinguisher.info.vel = Vector2Lerp(e->extinguisher.info.vel, (Vector2){0}, GetFrameTime() * 4.0f);
             e->extinguisher.info.pos = Vector2Add(e->extinguisher.info.pos, Vector2Scale(e->extinguisher.info.vel, GetFrameTime()));
             break;
+        } else {
+            if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+                int newParticleIndex = (curParticleIndex + 1) % MAX_PARTICLES;
+                Vector2 toMouse = Vector2Subtract(WorldMousePos(), e->extinguisher.info.pos);
+                Vector2 solidVelocity = Vector2Scale(Vector2Normalize(toMouse), 200.0);
+
+                GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime()*3.0));
+                particles[newParticleIndex] = (Particle){
+                    .pos = e->extinguisher.info.pos,
+                    .vel = Vector2Rotate(solidVelocity, (float)GetRandomValue(-50, 50) / 100.0),
+                    .color = (Color){255, 255, 255, 255},
+                    .lifetime = 3.0,
+                    .max_lifetime = 3.0,
+                };
+                curParticleIndex = newParticleIndex;
+            }
         }
     }
     }
@@ -526,15 +557,36 @@ void UpdateGameplayScreen(void)
             }
         }
     }
+
+    // process particles
+    for(int i = 0; i < MAX_PARTICLES; i++) {
+        if(particles[i].lifetime <= 0.0) {
+            continue;
+        }
+        for(int ii = 0; ii < entitiesLen; ii++) {
+            if(entities[ii].type == Obstacle && RectHasPoint(entities[ii].obstacle, particles[i].pos))
+            {
+                particles[i].vel = (Vector2) {0};
+                break;
+            }
+        }
+        particles[i].lifetime -= GetFrameTime();
+        particles[i].pos = Vector2Add(particles[i].pos, Vector2Scale(particles[i].vel, GetFrameTime()));
+    }
 }
 
 // Gameplay Screen Draw logic
 void DrawGameplayScreen(void)
 {
+    // background color not moved by camera
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){17, 17, 17, 255});
+
     BeginMode2D(camera);
+    
+    // draw entities
     for (int i = 0; i < entitiesLen; i++)
     {
+        // other stuff on top
         if (entities[i].type == Player)
             continue;
         if (entities[i].type == Extinguisher)
@@ -546,7 +598,18 @@ void DrawGameplayScreen(void)
             continue;
         DrawEntity(entities[i]);
     }
+
     DrawEntity(*GetPlayerEntity());
+
+    // particles
+    for(int i = 0; i < MAX_PARTICLES; i++) {
+        if(particles[i].lifetime <= 0.0)
+            continue;
+        Color toDraw = particles[i].color;
+        toDraw.a = (unsigned char) ((particles[i].lifetime / particles[i].max_lifetime)*255);
+        DrawCircleV(particles[i].pos, PARTICLE_RADIUS, toDraw);
+    }
+
     EndMode2D();
 
     if (editing)
