@@ -240,10 +240,10 @@ void LoadEntities(const char *path, bool setSpawnPoint)
     camera.target = GetPlayerEntity()->player.k.pos;
 
     // for debugging stuff, also put any programmatic level modifications here
-    for (int i = 0; i < entitiesLen; i++)
-    {
-        printf("%s %d\n", TypeNames[entities[i].type], entities[i].id);
-    }
+    // for (int i = 0; i < entitiesLen; i++)
+    // {
+    //     printf("%s %d\n", TypeNames[entities[i].type], entities[i].id);
+    // }
 }
 
 int max(int a, int b)
@@ -691,6 +691,13 @@ void UpdateGameplayScreen(void)
             }
         }
 
+        if (IsKeyPressed(KEY_E)) {
+            for(int i = 0; i < entitiesLen; i++) {
+                if(entities[i].type == Extinguisher && Vector2Distance(entities[i].extinguisher.info.pos, WorldMousePos()) < 15.0f) {
+                    entities[i].extinguisher.amountUsed = 1.0 - entities[i].extinguisher.amountUsed;
+                }
+            }
+        }
         if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
         {
             for (int i = 0; i < entitiesLen; i++)
