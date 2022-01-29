@@ -28,6 +28,7 @@
 #include "screens.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define SCREEN_SIZE 900 // screen assumed to be square. Used for camera offset
 const float player_radius = 18.0;
@@ -134,7 +135,7 @@ static int frameID = 0;
 // entity stuff
 typedef int ID;
 static Entity entities[100];
-static size_t entitiesLen = 0;
+static int entitiesLen = 0;
 static ID curNextEntityID = 0;
 
 // particles
@@ -228,7 +229,7 @@ void LoadEntities(const char *path, bool setSpawnPoint)
     }
     curNextEntityID = curNextEntityID + 1;
     entitiesLen = bytesRead / sizeof(Entity);
-    UnloadFileText(data);
+    UnloadFileText((char*)data);
 
     if (setSpawnPoint)
     {
@@ -246,13 +247,6 @@ void LoadEntities(const char *path, bool setSpawnPoint)
     // }
 }
 
-int max(int a, int b)
-{
-    if (a > b)
-        return a;
-    return b;
-}
-
 // returns whichever has greater magnitude
 float absmax(float a, float b)
 {
@@ -263,10 +257,9 @@ float absmax(float a, float b)
     return b;
 }
 
-#include <stdlib.h>
 float RandFloat(float min, float max)
 {
-    return ((max - min) * ((float)rand() / RAND_MAX)) + min;
+    return ((max - min) * ((float)rand() / (float)RAND_MAX)) + min;
 }
 
 Color ColorLerp(Color from, Color to, float factor)
@@ -281,7 +274,7 @@ Color ColorLerp(Color from, Color to, float factor)
 
 void DrawTexCenteredWithCol(Texture t, Vector2 pos, float scale, Color col)
 {
-    DrawTextureEx(t, Vector2Add(pos, Vector2Scale((Vector2){.x = t.width, .y = t.height}, -scale * 0.5)), 0.0f, scale, col);
+    DrawTextureEx(t, Vector2Add(pos, Vector2Scale((Vector2){.x = (float)t.width, .y = (float)t.height}, -scale * 0.5f)), 0.0f, scale, col);
 }
 
 void DrawTexCentered(Texture t, Vector2 pos, float scale)
@@ -428,7 +421,7 @@ void ProcessEntity(Entity *e)
     {
     case Player:
     {
-        camera.target = Vector2Lerp(camera.target, e->player.k.pos, GetFrameTime() * 5.0);
+        camera.target = Vector2Lerp(camera.target, e->player.k.pos, GetFrameTime() * 5.0f);
         float delta = GetFrameTime();
         Vector2 movement = {
             .x = (float)IsKeyDown(KEY_D) - (float)IsKeyDown(KEY_A),
@@ -447,7 +440,7 @@ void ProcessEntity(Entity *e)
         e->player.k.pos = Vector2Add(e->player.k.pos, Vector2Scale(e->player.k.vel, delta));
 
         bool inFire = false;
-        float fireLeft = 0.0;
+        float fireLeft = 0.0f;
         for (int i = 0; i < entitiesLen; i++)
         {
             if (entities[i].type == Fire && RectHasPoint(entities[i].fire.rect, e->player.k.pos))
@@ -460,18 +453,18 @@ void ProcessEntity(Entity *e)
 
         if (inFire)
         {
-            e->player.health -= Lerp(GetFrameTime() / 0.5, GetFrameTime() / 2.5, 1.0 - fireLeft);
+            e->player.health -= Lerp(GetFrameTime() / 0.5f, GetFrameTime() / 2.5f, 1.0f - fireLeft);
         }
         else if (!e->player.k.onGround)
         {
-            e->player.health -= GetFrameTime() / 3.0;
+            e->player.health -= GetFrameTime() / 3.0f;
         }
         else
         {
-            e->player.health += GetFrameTime() / 0.5;
+            e->player.health += GetFrameTime() / 0.5f;
         }
 
-        e->player.health = clamp(e->player.health, 0.0, 1.0);
+        e->player.health = clamp(e->player.health, 0.0f, 1.0f);
 
         if (e->player.grabbedEntity == -1)
         {
@@ -515,17 +508,17 @@ void ProcessEntity(Entity *e)
         {
             if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
             {
-                if(e->extinguisher.amountUsed >= 0.99) {
+                if(e->extinguisher.amountUsed >= 0.99f) {
                     break;
                 }
                 Vector2 toMouse = Vector2Subtract(WorldMousePos(), e->extinguisher.info.pos);
-                Vector2 solidVelocity = Vector2Scale(Vector2Normalize(toMouse), 200.0);
-                e->extinguisher.amountUsed += GetFrameTime()/2.0;
-                e->extinguisher.amountUsed = clamp(e->extinguisher.amountUsed, 0.0, 1.0);
-                GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime() * 3.0));
+                Vector2 solidVelocity = Vector2Scale(Vector2Normalize(toMouse), 200.0f);
+                e->extinguisher.amountUsed += GetFrameTime()/2.0f;
+                e->extinguisher.amountUsed = clamp(e->extinguisher.amountUsed, 0.0f, 1.0f);
+                GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime() * 3.0f));
                 SpawnParticle((Particle){
                     .pos = e->extinguisher.info.pos,
-                    .vel = Vector2Rotate(solidVelocity, (float)GetRandomValue(-50, 50) / 100.0),
+                    .vel = Vector2Rotate(solidVelocity, (float)GetRandomValue(-50, 50) / 100.0f),
                     .color = (Color){255, 255, 255, 255},
                     .lifetime = 3.0,
                     .max_lifetime = 3.0,
@@ -539,7 +532,7 @@ void ProcessEntity(Entity *e)
     {
         e->fire.fireParticleTimer += GetFrameTime();
         e->fire.fireLeft = clamp(e->fire.fireLeft, 0.0, 1.0);
-        if (e->fire.fireParticleTimer > Lerp(0.05, 0.5, 1.0 - e->fire.fireLeft))
+        if (e->fire.fireParticleTimer > Lerp(0.05f, 0.5f, 1.0f - e->fire.fireLeft))
         {
             SpawnParticle((Particle){
                 .pos = (Vector2){
@@ -556,6 +549,8 @@ void ProcessEntity(Entity *e)
         }
         break;
     }
+    default:
+    break;
     }
 }
 
@@ -580,7 +575,7 @@ void DrawEntity(Entity e)
     }
     case Fire:
     {
-        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0, ColorLerp((Color){230, 41, 55, 50}, (Color){50, 41, 255, 80}, 1.0 - e.fire.fireLeft));
+        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0, ColorLerp((Color){230, 41, 55, 50}, (Color){50, 41, 255, 80}, 1.0f - e.fire.fireLeft));
         break;
     }
     case Extinguisher:
@@ -590,7 +585,7 @@ void DrawEntity(Entity e)
     }
     case HelpText:
     {
-        DrawText(e.help.text, e.help.pos.x, e.help.pos.y, 24.0, RED);
+        DrawText(e.help.text, (int)e.help.pos.x, (int)e.help.pos.y, 24, RED);
         break;
     }
     }
@@ -694,7 +689,7 @@ void UpdateGameplayScreen(void)
         if (IsKeyPressed(KEY_E)) {
             for(int i = 0; i < entitiesLen; i++) {
                 if(entities[i].type == Extinguisher && Vector2Distance(entities[i].extinguisher.info.pos, WorldMousePos()) < 15.0f) {
-                    entities[i].extinguisher.amountUsed = 1.0 - entities[i].extinguisher.amountUsed;
+                    entities[i].extinguisher.amountUsed = 1.0f - entities[i].extinguisher.amountUsed;
                 }
             }
         }
@@ -733,6 +728,8 @@ void UpdateGameplayScreen(void)
                     }
                     break;
                 }
+                default:
+                break;
                 }
             }
         }
@@ -756,7 +753,7 @@ void UpdateGameplayScreen(void)
             {
                 particles[i].vel = (Vector2){0};
                 particles[i].lifetime /= 2.0;
-                entities[ii].fire.fireLeft -= 0.001;
+                entities[ii].fire.fireLeft -= 0.001f;
                 entities[ii].fire.fireLeft = clamp(entities[ii].fire.fireLeft, 0.0, 1.0);
             }
         }
@@ -769,7 +766,7 @@ void UpdateGameplayScreen(void)
 void DrawGameplayScreen(void)
 {
     // background color not moved by camera
-    Color bg = ColorLerp((Color){17, 17, 17, 255}, (Color){205, 50, 75, 255}, 1.0 - GetPlayerEntity()->player.health);
+    Color bg = ColorLerp((Color){17, 17, 17, 255}, (Color){205, 50, 75, 255}, 1.0f - GetPlayerEntity()->player.health);
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), bg);
 
     BeginMode2D(camera);
