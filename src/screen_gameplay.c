@@ -31,6 +31,8 @@
 
 #define SCREEN_SIZE 900 // screen assumed to be square. Used for camera offset
 const float player_radius = 18.0;
+const float player_grab_radius = 50.0;
+const char *level_name = "resources/saved.level";
 
 typedef struct KinematicInfo
 {
@@ -93,6 +95,7 @@ static Entity *currentEntity = NULL;
 // game state
 static int finishScreen = 0;
 static Camera2D camera;
+static int frameID = 0;
 
 // entity stuff
 typedef int ID;
@@ -181,15 +184,10 @@ void LoadEntities(const char *path)
     UnloadFileText(data);
 
     // for debugging stuff, also put any programmatic level modifications here
-    /*
-    for(int i = 0; i < entities_len; i++) {
-        Rectangle r = entities[i].data.rect;
-        if(fabs(r.width) < 1.0) {
-            RemoveEntity(i);
-            break;
-        }
-        printf("%f %f %f %f\n", r.x, r.y, r.width, r.height);
-    }*/
+    
+    for(int i = 0; i < entitiesLen; i++) {
+        printf("%s %d\n", TypeNames[entities[i].type], entities[i].id);
+    }
 }
 
 int max(int a, int b)
@@ -257,13 +255,14 @@ void InitGameplayScreen(void)
         .rotation = 0.0,
         .zoom = 1.0,
     };
-    if (FileExists("resources/saved.level"))
+    if (FileExists(level_name))
     {
-        LoadEntities("resources/saved.level");
+        LoadEntities(level_name);
     }
     else
     {
         entities[0] = (Entity){
+            .id = 0,
             .type = Player,
             .player = {
                 .k = {
@@ -274,6 +273,7 @@ void InitGameplayScreen(void)
             },
         };
         entities[1] = (Entity){
+            .id = 1,
             .type = Obstacle,
             .obstacle = {
                 .x = 100,
@@ -282,6 +282,7 @@ void InitGameplayScreen(void)
                 .height = 200,
             },
         };
+        curNextEntityID = 2;
         entitiesLen = 2;
     }
 }
@@ -308,7 +309,7 @@ bool RectHasPoint(Rectangle rect, Vector2 point)
     return CheckCollisionPointRec(point, rect);
 }
 
-KinematicInfo GlideAndBounce(KinematicInfo k)
+KinematicInfo GlideAndBounce(KinematicInfo k, float bounceFactor)
 {
     k.onGround = false;
     for (int i = 0; i < entitiesLen; i++)
@@ -317,6 +318,7 @@ KinematicInfo GlideAndBounce(KinematicInfo k)
         {
             Rectangle obstacle = FixNegativeRect(entities[i].obstacle);
             Vector2 normal = {0};
+            bool bounced = false;
             {
                 Vector2 obstacleCenter = {.x = obstacle.x + obstacle.width / 2.0f, .y = obstacle.y + obstacle.height / 2.0f};
                 Vector2 fromObstacleCenter = Vector2Subtract(k.pos, obstacleCenter);
@@ -325,11 +327,13 @@ KinematicInfo GlideAndBounce(KinematicInfo k)
                 Vector2 closestPointOnObstacle = Vector2Add(fromObstacleCenter, obstacleCenter);
                 if (Vector2Distance(closestPointOnObstacle, k.pos) < player_radius)
                 {
+                    bounced = true;
                     normal = Vector2Normalize(Vector2Subtract(k.pos, closestPointOnObstacle));
                     k.pos = Vector2Add(closestPointOnObstacle, Vector2Scale(normal, player_radius));
                 }
             }
-            k.vel = Vector2Reflect(k.vel, normal);
+            if(bounced)
+                k.vel = Vector2Scale(Vector2Reflect(k.vel, normal), bounceFactor);
         }
         else if (entities[i].type == Ground && RectHasPoint(entities[i].obstacle, k.pos))
         {
@@ -353,17 +357,47 @@ void ProcessEntity(Entity *e)
         };
 
         movement = Vector2Normalize(movement);
-        e->player.k = GlideAndBounce(e->player.k);
+        e->player.k = GlideAndBounce(e->player.k, 1.0f);
         if (e->player.k.onGround)
-            e->player.k.vel = Vector2Lerp(e->player.k.vel, Vector2Scale(movement, 50.0f), delta * 4.0f);
+            e->player.k.vel = Vector2Lerp(e->player.k.vel, Vector2Scale(movement, 400.0f), delta * 9.0f);
         e->player.k.pos = Vector2Add(e->player.k.pos, Vector2Scale(e->player.k.vel, delta));
+
+        if (e->player.grabbedEntity == -1)
+        {
+            if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
+            {
+                for (int i = 0; i < entitiesLen; i++)
+                {
+                    if (entities[i].type == Extinguisher && Vector2Distance(e->player.k.pos, entities[i].extinguisher.info.pos) < player_grab_radius)
+                    {
+                        e->player.grabbedEntity = entities[i].id;
+                        break;
+                    }
+                }
+            }
+        }
+        else
+        {
+            GetEntity(e->player.grabbedEntity)->extinguisher.info.pos = e->player.k.pos;
+            if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
+            {
+                Vector2 extraVelocity = Vector2Scale(Vector2Normalize(Vector2Subtract(WorldMousePos(), e->player.k.pos)), 250.0);
+                GetEntity(e->player.grabbedEntity)->extinguisher.info.vel = Vector2Add(e->player.k.vel, extraVelocity);
+                e->player.k.vel = Vector2Add(e->player.k.vel, Vector2Scale(extraVelocity, -1.0));
+                e->player.grabbedEntity = -1;
+            }
+        }
+
         break;
     }
     case Extinguisher:
     {
         if (GetPlayerEntity()->player.grabbedEntity != e->id)
         {
-            e->extinguisher.info = GlideAndBounce(e->extinguisher.info);
+            e->extinguisher.info = GlideAndBounce(e->extinguisher.info, 0.5f);
+            if (e->extinguisher.info.onGround)
+                e->extinguisher.info.vel = Vector2Lerp(e->extinguisher.info.vel, (Vector2){0}, GetFrameTime() * 4.0f);
+            e->extinguisher.info.pos = Vector2Add(e->extinguisher.info.pos, Vector2Scale(e->extinguisher.info.vel, GetFrameTime()));
             break;
         }
     }
@@ -386,7 +420,6 @@ void DrawEntity(Entity e)
     }
     case Ground:
     {
-        printf("Drawing %f %f\n", e.ground.x, e.ground.width);
         DrawRectanglePro(FixNegativeRect(e.ground), (Vector2){0}, 0.0, GREEN);
         break;
     }
@@ -400,12 +433,16 @@ void DrawEntity(Entity e)
 
 void UpdateGameplayScreen(void)
 {
+    frameID += 1;
     if (IsKeyPressed(KEY_TAB))
         editing = !editing;
+    
+    if (IsKeyPressed(KEY_R))
+        LoadEntities(level_name);
 
     for (int i = 0; i < entitiesLen; i++)
     {
-        ProcessEntity(entities, i);
+        ProcessEntity(&entities[i]);
     }
 
     // separate loops for gameplay and editing so editing can break early (deleting
@@ -419,8 +456,8 @@ void UpdateGameplayScreen(void)
 
         if (IsKeyPressed(KEY_F1))
         {
-            SaveEntities("resources/saved.level");
-            LoadEntities("resources/saved.level");
+            SaveEntities(level_name);
+            LoadEntities(level_name);
         }
         if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
             GetPlayerEntity()->player.k.pos = WorldMousePos();
@@ -497,7 +534,14 @@ void DrawGameplayScreen(void)
     BeginMode2D(camera);
     for (int i = 0; i < entitiesLen; i++)
     {
-        if(entities[i].type == Player)
+        if (entities[i].type == Player)
+            continue;
+        if (entities[i].type == Extinguisher)
+            continue;
+        DrawEntity(entities[i]);
+    }
+    for(int i = 0; i < entitiesLen; i++) {
+        if(entities[i].type != Extinguisher)
             continue;
         DrawEntity(entities[i]);
     }
