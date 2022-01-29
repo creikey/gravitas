@@ -570,12 +570,12 @@ void DrawEntity(Entity e)
     }
     case Obstacle:
     {
-        DrawRectanglePro(FixNegativeRect(e.obstacle), (Vector2){0}, 0.0, GRAY);
+        DrawRectanglePro(FixNegativeRect(e.obstacle), (Vector2){0}, 0.0, (Color){ 0, 40, 70, 255 });
         break;
     }
     case Ground:
     {
-        DrawRectanglePro(FixNegativeRect(e.ground), (Vector2){0}, 0.0, GREEN);
+        DrawRectanglePro(FixNegativeRect(e.ground), (Vector2){0}, 0.0, DARKGREEN);
         break;
     }
     case Fire:
