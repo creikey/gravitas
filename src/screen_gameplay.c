@@ -50,6 +50,12 @@ typedef struct PlayerData
 } PlayerData;
 typedef Rectangle ObstacleData;
 typedef Rectangle GroundData;
+typedef struct FireData
+{
+    Rectangle rect;
+    float fireLeft;
+    float fireParticleTimer;
+} FireData;
 typedef struct ExtinguisherData
 {
     KinematicInfo info;
@@ -63,15 +69,17 @@ enum Type
     Obstacle,
     Ground,
     Extinguisher,
+    Fire,
 
     // UPDATE MAX_TYPE WHEN YOU CHANGE THIS
 };
-#define MAX_TYPE Extinguisher
+#define MAX_TYPE Fire
 static const char *TypeNames[] = {
     "Player",
     "Obstacle",
     "Ground",
     "Extinguisher",
+    "Fire",
 };
 
 typedef struct Entity
@@ -84,12 +92,13 @@ typedef struct Entity
         ObstacleData obstacle;
         GroundData ground;
         ExtinguisherData extinguisher;
+        FireData fire;
         int empty_data[64]; // so I can add new fields without it breaking
     };
 } Entity;
 
-
-typedef struct Particle {
+typedef struct Particle
+{
     Vector2 pos;
     Vector2 vel;
     float lifetime;
@@ -119,6 +128,13 @@ static ID curNextEntityID = 0;
 #define PARTICLE_RADIUS 17.0
 static Particle particles[MAX_PARTICLES];
 static int curParticleIndex = 0;
+
+void SpawnParticle(Particle p)
+{
+    int newParticleIndex = (curParticleIndex + 1) % MAX_PARTICLES;
+    particles[newParticleIndex] = p;
+    curParticleIndex = newParticleIndex;
+}
 
 int GetEntityIndex(ID id)
 {
@@ -200,7 +216,8 @@ void LoadEntities(const char *path, bool setSpawnPoint)
     entitiesLen = bytesRead / sizeof(Entity);
     UnloadFileText(data);
 
-    if(setSpawnPoint) {
+    if (setSpawnPoint)
+    {
         spawnPoint = GetPlayerEntity()->player.k.pos;
     }
 
@@ -209,7 +226,8 @@ void LoadEntities(const char *path, bool setSpawnPoint)
     camera.target = GetPlayerEntity()->player.k.pos;
 
     // for debugging stuff, also put any programmatic level modifications here
-    for(int i = 0; i < entitiesLen; i++) {
+    for (int i = 0; i < entitiesLen; i++)
+    {
         printf("%s %d\n", TypeNames[entities[i].type], entities[i].id);
     }
 }
@@ -231,8 +249,15 @@ float absmax(float a, float b)
     return b;
 }
 
-Color ColorLerp(Color from, Color to, float factor) {
-    return (Color) {
+#include <stdlib.h>
+float RandFloat(float min, float max)
+{
+    return ((max - min) * ((float)rand() / RAND_MAX)) + min;
+}
+
+Color ColorLerp(Color from, Color to, float factor)
+{
+    return (Color){
         .r = (unsigned char)Lerp((float)from.r, (float)to.r, factor),
         .g = (unsigned char)Lerp((float)from.b, (float)to.g, factor),
         .b = (unsigned char)Lerp((float)from.g, (float)to.b, factor),
@@ -366,7 +391,7 @@ KinematicInfo GlideAndBounce(KinematicInfo k, float bounceFactor)
                     k.pos = Vector2Add(closestPointOnObstacle, Vector2Scale(normal, player_radius));
                 }
             }
-            if(bounced)
+            if (bounced)
                 k.vel = Vector2Scale(Vector2Reflect(k.vel, normal), bounceFactor);
         }
         else if (entities[i].type == Ground && RectHasPoint(entities[i].obstacle, k.pos))
@@ -393,21 +418,34 @@ void ProcessEntity(Entity *e)
         movement = Vector2Normalize(movement);
         bool onGroundBefore = e->player.k.onGround;
         e->player.k = GlideAndBounce(e->player.k, 1.0f);
-        if(!onGroundBefore && e->player.k.onGround) {
+        if (!onGroundBefore && e->player.k.onGround)
+        {
             spawnPoint = e->player.k.pos;
         }
         if (e->player.k.onGround)
             e->player.k.vel = Vector2Lerp(e->player.k.vel, Vector2Scale(movement, 400.0f), delta * 9.0f);
         e->player.k.pos = Vector2Add(e->player.k.pos, Vector2Scale(e->player.k.vel, delta));
 
-        if(!e->player.k.onGround) {
-            e->player.health -= GetFrameTime()/3.0;
-        } else {
-            e->player.health += GetFrameTime()/0.5;
+        bool inFire = false;
+        for(int i = 0; i < entitiesLen; i++) {
+            if(entities[i].type == Fire && RectHasPoint(entities[i].fire.rect, e->player.k.pos)) {
+                inFire = true;
+                break;
+            }
+        }
+
+        if(inFire) {
+            e->player.health -= GetFrameTime() / 0.5;
+        } else if (!e->player.k.onGround)
+        {
+            e->player.health -= GetFrameTime() / 3.0;
+        }
+        else
+        {
+            e->player.health += GetFrameTime() / 0.5;
         }
 
         e->player.health = clamp(e->player.health, 0.0, 1.0);
- 
 
         if (e->player.grabbedEntity == -1)
         {
@@ -446,23 +484,44 @@ void ProcessEntity(Entity *e)
                 e->extinguisher.info.vel = Vector2Lerp(e->extinguisher.info.vel, (Vector2){0}, GetFrameTime() * 4.0f);
             e->extinguisher.info.pos = Vector2Add(e->extinguisher.info.pos, Vector2Scale(e->extinguisher.info.vel, GetFrameTime()));
             break;
-        } else {
-            if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-                int newParticleIndex = (curParticleIndex + 1) % MAX_PARTICLES;
+        }
+        else
+        {
+            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+            {
                 Vector2 toMouse = Vector2Subtract(WorldMousePos(), e->extinguisher.info.pos);
                 Vector2 solidVelocity = Vector2Scale(Vector2Normalize(toMouse), 200.0);
 
-                GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime()*3.0));
-                particles[newParticleIndex] = (Particle){
+                GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime() * 3.0));
+                SpawnParticle((Particle){
                     .pos = e->extinguisher.info.pos,
                     .vel = Vector2Rotate(solidVelocity, (float)GetRandomValue(-50, 50) / 100.0),
                     .color = (Color){255, 255, 255, 255},
                     .lifetime = 3.0,
                     .max_lifetime = 3.0,
-                };
-                curParticleIndex = newParticleIndex;
+                });
             }
         }
+        break;
+    }
+    case Fire:
+    {
+        e->fire.fireParticleTimer += GetFrameTime();
+        if (e->fire.fireParticleTimer > 0.05)
+        {
+            SpawnParticle((Particle){
+                .pos = (Vector2){
+                    .x = RandFloat(e->fire.rect.x, e->fire.rect.x + e->fire.rect.width),
+                    .y = RandFloat(e->fire.rect.y, e->fire.rect.y + e->fire.rect.height),
+                },
+                .vel = Vector2Rotate((Vector2){.x = 20.0, .y = 0.0}, RandFloat(-2.0 * PI, 2.0 * PI)),
+                .color = (Color){255, 0, 0, 255},
+                .lifetime = 4.0,
+                .max_lifetime = 10.0,
+            });
+            e->fire.fireParticleTimer = 0.0;
+        }
+        break;
     }
     }
 }
@@ -486,6 +545,11 @@ void DrawEntity(Entity e)
         DrawRectanglePro(FixNegativeRect(e.ground), (Vector2){0}, 0.0, GREEN);
         break;
     }
+    case Fire:
+    {
+        DrawRectanglePro(FixNegativeRect(e.fire.rect), (Vector2){0}, 0.0, (Color){230, 41, 55, 50});
+        break;
+    }
     case Extinguisher:
     {
         DrawTexCentered(textures[EXTINGUISHER_TEXTURE], e.extinguisher.info.pos, 0.35f);
@@ -499,7 +563,7 @@ void UpdateGameplayScreen(void)
     frameID += 1;
     if (IsKeyPressed(KEY_TAB))
         editing = !editing;
-    
+
     if (IsKeyPressed(KEY_R))
         LoadEntities(level_name, false);
 
@@ -509,7 +573,9 @@ void UpdateGameplayScreen(void)
     }
 
     // worried about calling load entities from within the entity processing loop
-    if(GetPlayerEntity()->player.health <= 0.0) {
+    // so I put it here
+    if (GetPlayerEntity()->player.health <= 0.0)
+    {
         LoadEntities(level_name, false);
         GetPlayerEntity()->player.health = 1.0;
     }
@@ -539,7 +605,7 @@ void UpdateGameplayScreen(void)
             {
                 Entity toAdd = {0};
                 toAdd.type = currentType;
-                if (currentType == Ground || currentType == Obstacle)
+                if (currentType == Ground || currentType == Obstacle || currentType == Fire)
                 {
                     toAdd.ground.x = WorldMousePos().x;
                     toAdd.ground.y = WorldMousePos().y;
@@ -553,7 +619,7 @@ void UpdateGameplayScreen(void)
             }
         }
 
-        if (currentEntity != NULL && (currentEntity->type == Ground || currentEntity->type == Obstacle))
+        if (currentEntity != NULL && (currentEntity->type == Ground || currentEntity->type == Obstacle || currentEntity->type == Fire))
         {
             currentEntity->ground.width = WorldMousePos().x - currentEntity->ground.x;
             currentEntity->ground.height = WorldMousePos().y - currentEntity->ground.y;
@@ -573,6 +639,7 @@ void UpdateGameplayScreen(void)
                 {
                 case Obstacle:
                 case Ground:
+                case Fire:
                 {
                     if (RectHasPoint(entities[i].ground, WorldMousePos()))
                     {
@@ -596,14 +663,17 @@ void UpdateGameplayScreen(void)
     }
 
     // process particles
-    for(int i = 0; i < MAX_PARTICLES; i++) {
-        if(particles[i].lifetime <= 0.0) {
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        if (particles[i].lifetime <= 0.0)
+        {
             continue;
         }
-        for(int ii = 0; ii < entitiesLen; ii++) {
-            if(entities[ii].type == Obstacle && RectHasPoint(entities[ii].obstacle, particles[i].pos))
+        for (int ii = 0; ii < entitiesLen; ii++)
+        {
+            if (entities[ii].type == Obstacle && RectHasPoint(entities[ii].obstacle, particles[i].pos))
             {
-                particles[i].vel = (Vector2) {0};
+                particles[i].vel = (Vector2){0};
                 break;
             }
         }
@@ -616,11 +686,11 @@ void UpdateGameplayScreen(void)
 void DrawGameplayScreen(void)
 {
     // background color not moved by camera
-    Color bg = ColorLerp((Color){17, 17, 17, 255}, (Color){205, 50, 75, 255}, 1.0  - GetPlayerEntity()->player.health);
+    Color bg = ColorLerp((Color){17, 17, 17, 255}, (Color){205, 50, 75, 255}, 1.0 - GetPlayerEntity()->player.health);
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), bg);
 
     BeginMode2D(camera);
-    
+
     // draw entities
     for (int i = 0; i < entitiesLen; i++)
     {
@@ -631,8 +701,9 @@ void DrawGameplayScreen(void)
             continue;
         DrawEntity(entities[i]);
     }
-    for(int i = 0; i < entitiesLen; i++) {
-        if(entities[i].type != Extinguisher)
+    for (int i = 0; i < entitiesLen; i++)
+    {
+        if (entities[i].type != Extinguisher)
             continue;
         DrawEntity(entities[i]);
     }
@@ -640,11 +711,12 @@ void DrawGameplayScreen(void)
     DrawEntity(*GetPlayerEntity());
 
     // particles
-    for(int i = 0; i < MAX_PARTICLES; i++) {
-        if(particles[i].lifetime <= 0.0)
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        if (particles[i].lifetime <= 0.0)
             continue;
         Color toDraw = particles[i].color;
-        toDraw.a = (unsigned char) ((particles[i].lifetime / particles[i].max_lifetime)*255);
+        toDraw.a = (unsigned char)((particles[i].lifetime / particles[i].max_lifetime) * 255);
         DrawCircleV(particles[i].pos, PARTICLE_RADIUS, toDraw);
     }
 
