@@ -59,7 +59,7 @@ typedef struct FireData
 typedef struct ExtinguisherData
 {
     KinematicInfo info;
-    float amountLeft;
+    float amountUsed;
 } ExtinguisherData;
 typedef struct HelpTextData
 {
@@ -279,10 +279,16 @@ Color ColorLerp(Color from, Color to, float factor)
     };
 }
 
+void DrawTexCenteredWithCol(Texture t, Vector2 pos, float scale, Color col)
+{
+    DrawTextureEx(t, Vector2Add(pos, Vector2Scale((Vector2){.x = t.width, .y = t.height}, -scale * 0.5)), 0.0f, scale, col);
+}
+
 void DrawTexCentered(Texture t, Vector2 pos, float scale)
 {
-    DrawTextureEx(t, Vector2Add(pos, Vector2Scale((Vector2){.x = t.width, .y = t.height}, -scale * 0.5)), 0.0f, scale, WHITE);
+    DrawTexCenteredWithCol(t, pos, scale, WHITE);
 }
+
 
 float clamp(float value, float min, float max)
 {
@@ -509,9 +515,13 @@ void ProcessEntity(Entity *e)
         {
             if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
             {
+                if(e->extinguisher.amountUsed >= 0.99) {
+                    break;
+                }
                 Vector2 toMouse = Vector2Subtract(WorldMousePos(), e->extinguisher.info.pos);
                 Vector2 solidVelocity = Vector2Scale(Vector2Normalize(toMouse), 200.0);
-
+                e->extinguisher.amountUsed += GetFrameTime()/2.0;
+                e->extinguisher.amountUsed = clamp(e->extinguisher.amountUsed, 0.0, 1.0);
                 GetPlayerEntity()->player.k.vel = Vector2Add(GetPlayerEntity()->player.k.vel, Vector2Scale(toMouse, -GetFrameTime() * 3.0));
                 SpawnParticle((Particle){
                     .pos = e->extinguisher.info.pos,
@@ -575,7 +585,7 @@ void DrawEntity(Entity e)
     }
     case Extinguisher:
     {
-        DrawTexCentered(textures[EXTINGUISHER_TEXTURE], e.extinguisher.info.pos, 0.35f);
+        DrawTexCenteredWithCol(textures[EXTINGUISHER_TEXTURE], e.extinguisher.info.pos, 0.35f, ColorLerp((Color){255, 255, 255, 255}, (Color){0, 255, 255, 255}, e.extinguisher.amountUsed));
         break;
     }
     case HelpText:
