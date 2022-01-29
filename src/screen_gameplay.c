@@ -182,9 +182,10 @@ void LoadEntities(const char *path)
     curNextEntityID = curNextEntityID + 1;
     entitiesLen = bytesRead / sizeof(Entity);
     UnloadFileText(data);
+    
+    camera.target = GetPlayerEntity()->player.k.pos;
 
     // for debugging stuff, also put any programmatic level modifications here
-    
     for(int i = 0; i < entitiesLen; i++) {
         printf("%s %d\n", TypeNames[entities[i].type], entities[i].id);
     }
@@ -550,8 +551,8 @@ void DrawGameplayScreen(void)
 
     if (editing)
     {
-        DrawText("Editing", 0, 0, 16, RED);
-        DrawText(TypeNames[currentType], 100, 0, 16, RED);
+        DrawText("Editing Mode\nScroll to change target\nClick to place\nRight click to delete\nMiddle click to teleport\nIt saves in browser storage or something idk", 0, 0, 16, RED);
+        DrawText(TypeNames[currentType], 200, 0, 16, RED);
     }
 }
 
